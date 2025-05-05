@@ -1,7 +1,8 @@
-// Função PRINCIPAL: Next_DU (versão corrigida)
+// Função DeltaDU corrigida
 (data as date, delta as number) as date =>
 let
-    // --- Funções auxiliares ---
+    // ========== FUNÇÕES AUXILIARES ==========
+    // Calcula a data da Páscoa (algoritmo de Meeus/Jones/Butcher)
     CalculaPascoa = (ano as number) as date =>
         let
             a = Number.Mod(ano, 19),
@@ -21,12 +22,13 @@ let
         in
             #date(ano, mes, dia),
 
+    // Lista de feriados brasileiros
     FeriadosNacionaisBR = (ano as number) as list =>
         let
             FeriadosFixos = {
                 #date(ano, 1, 1),   // Ano Novo
                 #date(ano, 4, 21),  // Tiradentes
-                #date(ano, 5, 1),   // Dia do Trabalho (FERIADO EM 1/5/2025)
+                #date(ano, 5, 1),   // Dia do Trabalho
                 #date(ano, 9, 7),   // Independência
                 #date(ano, 10, 12), // Nossa Senhora Aparecida
                 #date(ano, 11, 2),  // Finados
@@ -45,48 +47,42 @@ let
         in
             TodosFeriados,
 
+    // Verifica se é dia útil
     IsDU = (data as date) as logical =>
         let
-            DiaSemana = Date.DayOfWeek(data, Day.Monday),
-            Feriado = List.Contains(FeriadosNacionaisBR(Date.Year(data)), data)
+            diaSemana = Date.DayOfWeek(data, Day.Monday),
+            naoFeriado = not List.Contains(FeriadosNacionaisBR(Date.Year(data)), data)
         in
-            DiaSemana < 5 and not Feriado,  // 0=Segunda a 4=Sexta, não é feriado
+            diaSemana < 5 and naoFeriado,
 
-    // --- Lógica principal ---
-    // Passo 1: Avança/retrocede apenas dias úteis
-    DataFinal = if delta > 0 then
+    // ========== LÓGICA PRINCIPAL ==========
+    // Função para avançar 1 dia útil
+    Avancar1DiaUtil = (currentDate as date) as date =>
+        let
+            proximoDia = Date.AddDays(currentDate, 1),
+            resultado = if IsDU(proximoDia) then proximoDia else @Avancar1DiaUtil(proximoDia)
+        in
+            resultado,
+
+    // Calcula a data final
+    DataFinal = if delta = 0 then data
+                else if delta > 0 then
                     List.Accumulate(
                         {1..delta},
                         data,
-                        (currentDate, _) => 
-                            let
-                                ProximoDia = Date.AddDays(currentDate, 1),
-                                DiaUtil = if IsDU(ProximoDia) then ProximoDia else @NextDU(ProximoDia)
-                            in
-                                DiaUtil
-                    )
+                        (state, _) => Avancar1DiaUtil(state))
                 else
-                    List.Accumulate(
-                        {1..Number.Abs(delta)},
-                        data,
-                        (currentDate, _) => 
+                    let
+                        Retroceder1DiaUtil = (currentDate as date) as date =>
                             let
-                                DiaAnterior = Date.AddDays(currentDate, -1),
-                                DiaUtil = if IsDU(DiaAnterior) then DiaAnterior else @LastDU(DiaAnterior)
+                                diaAnterior = Date.AddDays(currentDate, -1),
+                                resultado = if IsDU(diaAnterior) then diaAnterior else @Retroceder1DiaUtil(diaAnterior)
                             in
-                                DiaUtil
-                    ),
-
-    NextDU = (data as date) as date =>
-        if IsDU(Date.AddDays(data, 1)) then 
-            Date.AddDays(data, 1)
-        else 
-            @NextDU(Date.AddDays(data, 1)),
-
-    LastDU = (data as date) as date =>
-        if IsDU(Date.AddDays(data, -1)) then 
-            Date.AddDays(data, -1)
-        else 
-            @LastDU(Date.AddDays(data, -1))
+                                resultado
+                    in
+                        List.Accumulate(
+                            {1..Number.Abs(delta)},
+                            data,
+                            (state, _) => Retroceder1DiaUtil(state))
 in
     DataFinal
